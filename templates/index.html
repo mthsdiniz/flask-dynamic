@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map and Flask</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <link rel="stylesheet" href="/static/main.css">
+</head>
+<body>
+    <div id="map"></div>
+    <div class="controls">
+        <select id="saved-maps">
+            <option value="">Select a saved map</option>
+            {% for map in maps %}
+                <option value="{{ map.id }}">{{ map.name }}</option>
+            {% endfor %}
+        </select>
+        <button id="save-map">Save Map</button>
+        <button id="load-map">Load Map</button>
+        <button id="add-tiff">Add GeoTIFF Layer</button>
+
+    </div>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff@1.0.0-beta.7/dist-browser/geotiff.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plotty@0.2.1/dist/plotty.min.js"></script>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>
