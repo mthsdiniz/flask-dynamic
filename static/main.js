@@ -2,6 +2,7 @@ const map = L.map('map').setView([51.505, -0.09], 13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 const drawnItems = new L.FeatureGroup();
+const tiffLayers = [];
 map.addLayer(drawnItems);
 
 const drawControl = new L.Control.Draw({
@@ -28,9 +29,13 @@ document.getElementById('save-map').addEventListener('click', function () {
     const name = prompt("Enter a name for your map:");
     if (name) {
         const vectorLayers = JSON.stringify(drawnItems.toGeoJSON());
-        const rasterLayersStr = JSON.stringify(rasterLayers);
         const tiffLayersStr = JSON.stringify(tiffLayers);
-        $.post('/save_map', { name, vector_layers: vectorLayers, raster_layers: rasterLayersStr, tiff_layers: tiffLayersStr }, function (data) {
+        const zoomLevel = map.getZoom();
+        const center = map.getCenter();
+        console.log(center)
+        console.log(center.lat)
+        console.log(center.lng)
+        $.post('/save_map', { name, vector_layers: vectorLayers, tiff_layers: tiffLayersStr, zoom_level: zoomLevel, center_lat: center.lat, center_lng: center.lng }, function (data) {
             if (data.status === 'success') {
                 alert("Map saved successfully!");
                 location.reload();
@@ -45,94 +50,74 @@ document.getElementById('load-map').addEventListener('click', async function () 
     const mapId = document.getElementById('saved-maps').value;
     if (mapId) {
         $.get('/load_map', { map_id: mapId }, async function (data) {
-            // Load vector and raster layers as before
+            drawnItems.clearLayers();
+            const zoomLevel = parseInt(data.zoom_level);
+            const centerLat = parseFloat(data.center_lat);
+            const centerLng = parseFloat(data.center_lng);
+            map.setView([centerLat, centerLng], zoomLevel);
+            const vectorLayers = JSON.parse(data.vector_layers)
+            L.geoJSON(vectorLayers).eachLayer(function (layer) {
+                drawnItems.addLayer(layer);
+            });
 
             const tiffLayers = JSON.parse(data.tiff_layers);
             for (const layerInfo of tiffLayers) {
-                const response = await fetch(layerInfo.url);
-                const arrayBuffer = await response.arrayBuffer();
-                const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
-                const image = await tiff.getImage();
-                const rasterData = await image.readRasters();
-                const bbox = image.getBoundingBox();
-                const plot = new plotty.plot({
-                    data: rasterData[0],
-                    width: image.getWidth(),
-                    height: image.getHeight(),
-                    domain: [0, 255],
-                    colorScale: 'viridis'
-                });
-
-                const tiffLayer = L.imageOverlay.canvas({ opacity: 0.7 });
-                tiffLayer.setBounds([
-                    [bbox[1], bbox[0]],
-                    [bbox[3], bbox[2]]
-                ]);
-                tiffLayer.on('add', () => {
-                    const ctx = tiffLayer._ctx;
-                    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-                    ctx.drawImage(plot.render(), 0, 0, ctx.canvas.width, ctx.canvas.height);
-                });
-                tiffLayer.addTo(map);
+                fetch("/fetch_geotiff", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ url: layerInfo.url }),
+                })
+                    .then(response => response.arrayBuffer())
+                    .then(arrayBuffer => {
+                        parseGeoraster(arrayBuffer).then(georaster => {
+                            console.log("georaster:", georaster);
+                            var layer = new GeoRasterLayer({
+                                georaster: georaster,
+                                opacity: 0.7
+                            });
+                            layer.addTo(map);
+            
+                            map.fitBounds(layer.getBounds());
+            
+                        });
+                    });
+            
             }
         });
     }
 });
 
-
-
-function addRasterLayer() {
-    const url = prompt('Enter the WMS URL for the raster layer:');
-    const layerName = prompt('Enter the layer name for the raster layer:');
-    const rasterLayer = L.tileLayer.wms(url, {
-        layers: layerName,
-        format: 'image/png',
-        transparent: true
-    }).addTo(map);
-
-    const rasterLayerInfo = {
-        url: url,
-        name: layerName
-    };
-    rasterLayers.push(rasterLayerInfo);
-}
-
-document.getElementById('add-raster').addEventListener('click', addRasterLayer);
-
-async function addTiffLayer() {
+document.getElementById('add-tiff').addEventListener('click', async function () {
     const url = prompt('Enter the GeoTIFF file URL:');
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
-    const image = await tiff.getImage();
-    const rasterData = await image.readRasters();
-    const bbox = image.getBoundingBox();
-    const plot = new plotty.plot({
-        data: rasterData[0],
-        width: image.getWidth(),
-        height: image.getHeight(),
-        domain: [0, 255],
-        colorScale: 'viridis'
-    });
 
-    const tiffLayer = L.imageOverlay.canvas({ opacity: 0.7 });
-    tiffLayer.setBounds([
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]]
-    ]);
-    tiffLayer.on('add', () => {
-        const ctx = tiffLayer._ctx;
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.drawImage(plot.render(), 0, 0, ctx.canvas.width, ctx.canvas.height);
-    });
-    tiffLayer.addTo(map);
+    fetch("/fetch_geotiff", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: url }),
+    })
+        .then(response => response.arrayBuffer())
+        .then(arrayBuffer => {
+            parseGeoraster(arrayBuffer).then(georaster => {
+                console.log("georaster:", georaster);
+                var layer = new GeoRasterLayer({
+                    georaster: georaster,
+                    opacity: 0.7
+                });
+                layer.addTo(map);
+
+                map.fitBounds(layer.getBounds());
+
+            });
+        });
 
     const tiffLayerInfo = {
         url: url
     };
     tiffLayers.push(tiffLayerInfo);
-}
-
-document.getElementById('add-tiff').addEventListener('click', addTiffLayer);
+});
 
 
